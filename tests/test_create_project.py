@@ -10,7 +10,8 @@ from utils import (
     paths,
     generated_project_dir,
     parametrize_by_cloud,
-    parametrize_by_project_generation_params,
+    parametrize_by_project_generation_mlops_params,
+    parametrize_by_project_generation_agentops_params,
 )
 from unittest import mock
 
@@ -20,6 +21,7 @@ DEFAULT_PROJECT_DIRECTORY = "my_mlops_project"
 # UUID that when set as project name, prevents the removal of files needed in testing
 TEST_PROJECT_NAME = "27896cf3-bb3e-476e-8129-96df0406d5c7"
 TEST_PROJECT_DIRECTORY = "27896cf3_bb3e_476e_8129_96df0406d5c7"
+
 DEFAULT_PARAM_VALUES = {
     "input_project_type": DEFAULT_PROJECT_TYPE,
     "input_default_branch": "main",
@@ -84,7 +86,7 @@ def assert_no_disallowed_strings_in_files(
         assert_no_disallowed_strings(path)
 
 
-@parametrize_by_project_generation_params
+@parametrize_by_project_generation_mlops_params
 def test_no_template_strings_after_param_substitution(
     cloud, include_models_in_unity_catalog, generated_project_dir
 ):
@@ -129,12 +131,14 @@ def test_no_databricks_doc_strings_before_project_generation():
 
 
 @pytest.mark.large
-@parametrize_by_project_generation_params
-def test_markdown_links(cloud, include_models_in_unity_catalog, generated_project_dir):
+@parametrize_by_project_generation_mlops_params
+def test_markdown_links_mlops(
+    project_type, cloud, include_models_in_unity_catalog, generated_project_dir
+):
     if cloud == "gcp" and include_models_in_unity_catalog == "yes":
         # Skip test for GCP with Unity Catalog
         return
-    markdown_checker_configs(generated_project_dir)
+    markdown_checker_configs(generated_project_dir, project_type)
     subprocess.run(
         """
         npm install -g markdown-link-check@3.10.3
@@ -143,7 +147,23 @@ def test_markdown_links(cloud, include_models_in_unity_catalog, generated_projec
         shell=True,
         check=True,
         executable="/bin/bash",
-        cwd=(generated_project_dir / "my-mlops-project"),
+        cwd=(generated_project_dir / f"my-{project_type}-project"),
+    )
+
+
+@pytest.mark.large
+@parametrize_by_project_generation_agentops_params
+def test_markdown_links_agentops(project_type, generated_project_dir):
+    markdown_checker_configs(generated_project_dir, project_type)
+    subprocess.run(
+        """
+        npm install -g markdown-link-check@3.10.3
+        find . -name \*.md -print0 | xargs -0 -n1 markdown-link-check -c ./checker-config.json
+        """,
+        shell=True,
+        check=True,
+        executable="/bin/bash",
+        cwd=(generated_project_dir / f"my-{project_type}-project"),
     )
 
 
@@ -170,10 +190,11 @@ def test_generate_succeeds_with_valid_params(tmpdir, databricks_cli, valid_param
     generate(tmpdir, databricks_cli, valid_params)
 
 
-@parametrize_by_project_generation_params
+@parametrize_by_project_generation_mlops_params
 def test_generate_project_with_default_values(
     tmpdir,
     databricks_cli,
+    project_type,
     cloud,
     cicd_platform,
     setup_cicd_and_project,
@@ -218,15 +239,16 @@ def test_generate_project_with_default_values(
 
 
 def prepareContext(
+    project_type,
     cloud,
     cicd_platform,
     setup_cicd_and_project,
-    include_feature_store,
-    include_mlflow_recipes,
-    include_models_in_unity_catalog,
+    include_feature_store="",
+    include_mlflow_recipes="",
+    include_models_in_unity_catalog="",
 ):
     context = {
-        "input_project_type": DEFAULT_PROJECT_TYPE,
+        "input_project_type": project_type,
         "input_setup_cicd_and_project": setup_cicd_and_project,
         "input_project_name": TEST_PROJECT_NAME,
         "input_root_dir": TEST_PROJECT_NAME,
@@ -244,10 +266,11 @@ def prepareContext(
     return context
 
 
-@parametrize_by_project_generation_params
+@parametrize_by_project_generation_mlops_params
 def test_generate_project_check_delta_output(
     tmpdir,
     databricks_cli,
+    project_type,
     cloud,
     cicd_platform,
     setup_cicd_and_project,
@@ -262,6 +285,7 @@ def test_generate_project_check_delta_output(
         # Skip test for GCP with Unity Catalog
         return
     context = prepareContext(
+        project_type,
         cloud,
         cicd_platform,
         setup_cicd_and_project,
@@ -288,10 +312,11 @@ def test_generate_project_check_delta_output(
         assert not os.path.isfile(delta_notebook_path)
 
 
-@parametrize_by_project_generation_params
+@parametrize_by_project_generation_mlops_params
 def test_generate_project_check_feature_store_output(
     tmpdir,
     databricks_cli,
+    project_type,
     cloud,
     cicd_platform,
     setup_cicd_and_project,
@@ -306,6 +331,7 @@ def test_generate_project_check_feature_store_output(
         # Skip test for GCP with Unity Catalog
         return
     context = prepareContext(
+        project_type,
         cloud,
         cicd_platform,
         setup_cicd_and_project,
@@ -328,10 +354,11 @@ def test_generate_project_check_feature_store_output(
         assert not os.path.isfile(fs_notebook_path)
 
 
-@parametrize_by_project_generation_params
+@parametrize_by_project_generation_mlops_params
 def test_generate_project_check_recipe_output(
     tmpdir,
     databricks_cli,
+    project_type,
     cloud,
     cicd_platform,
     setup_cicd_and_project,
@@ -346,6 +373,7 @@ def test_generate_project_check_recipe_output(
         # Skip test for GCP with Unity Catalog
         return
     context = prepareContext(
+        project_type,
         cloud,
         cicd_platform,
         setup_cicd_and_project,
@@ -410,3 +438,264 @@ def test_generate_project_default_project_name_params(tmpdir, databricks_cli):
     generate(tmpdir, databricks_cli, context={})
     readme_contents = (tmpdir / DEFAULT_PROJECT_NAME / "README.md").read_text("utf-8")
     assert DEFAULT_PROJECT_NAME in readme_contents
+
+
+@parametrize_by_project_generation_agentops_params
+def test_generate_project_check_agent_development_output(
+    tmpdir,
+    databricks_cli,
+    project_type,
+    cloud,
+    cicd_platform,
+    setup_cicd_and_project,
+    include_feature_store,
+    include_mlflow_recipes,
+    include_models_in_unity_catalog,
+):
+    """
+    Asserts the behavior of agent development-related artifacts when generating AgentOps Stacks.
+    """
+    context = prepareContext(
+        project_type,
+        cloud,
+        cicd_platform,
+        setup_cicd_and_project,
+    )
+
+    generate(tmpdir, databricks_cli, context=context)
+    agent_notebook_path = (
+        tmpdir
+        / TEST_PROJECT_NAME
+        / TEST_PROJECT_DIRECTORY
+        / "agent_development"
+        / "agent"
+        / "notebooks"
+        / "Agent.py"
+    )
+
+    if setup_cicd_and_project != "CICD_Only":
+        agent_notebook_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "agent_development"
+            / "agent"
+            / "notebooks"
+            / "Agent.py"
+        )
+        assert os.path.isfile(
+            agent_notebook_path
+        ), "Agent development notebook should exist"
+        agent_readme_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "agent_development"
+            / "agent"
+            / "README.md"
+        )
+        assert os.path.isfile(agent_readme_path), "Agent README should exist"
+
+
+@parametrize_by_project_generation_agentops_params
+def test_generate_project_check_agent_deployment_output(
+    tmpdir,
+    databricks_cli,
+    project_type,
+    cloud,
+    cicd_platform,
+    setup_cicd_and_project,
+    include_feature_store,
+    include_mlflow_recipes,
+    include_models_in_unity_catalog,
+):
+    """
+    Asserts the behavior of agent deployment-related artifacts when generating AgentOps Stacks.
+    """
+    context = prepareContext(
+        project_type,
+        cloud,
+        cicd_platform,
+        setup_cicd_and_project,
+    )
+    generate(tmpdir, databricks_cli, context=context)
+
+    if setup_cicd_and_project != "CICD_Only":
+        deployment_notebook_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "agent_deployment"
+            / "model_serving"
+            / "notebooks"
+            / "ModelServing.py"
+        )
+        assert os.path.isfile(
+            deployment_notebook_path
+        ), "Agent deployment notebook should exist"
+
+        deployment_readme_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "agent_deployment"
+            / "README.md"
+        )
+        assert os.path.isfile(
+            deployment_readme_path
+        ), "Agent deployment README should exist"
+
+
+@parametrize_by_project_generation_agentops_params
+def test_generate_project_check_data_preparation_output(
+    tmpdir,
+    databricks_cli,
+    project_type,
+    cloud,
+    cicd_platform,
+    setup_cicd_and_project,
+    include_feature_store,
+    include_mlflow_recipes,
+    include_models_in_unity_catalog,
+):
+    """
+    Asserts the behavior of data preparation-related artifacts when generating AgentOps Stacks.
+    """
+    context = prepareContext(
+        project_type,
+        cloud,
+        cicd_platform,
+        setup_cicd_and_project,
+    )
+    generate(tmpdir, databricks_cli, context=context)
+
+    if setup_cicd_and_project != "CICD_Only":
+        data_ingestion_notebook_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "data_preparation"
+            / "data_ingestion"
+            / "notebooks"
+            / "DataIngestion.py"
+        )
+        assert os.path.isfile(
+            data_ingestion_notebook_path
+        ), "Data ingestion notebook should exist"
+
+        data_preprocessing_notebook_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "data_preparation"
+            / "data_preprocessing"
+            / "notebooks"
+            / "DataPreprocessing.py"
+        )
+        assert os.path.isfile(
+            data_preprocessing_notebook_path
+        ), "Data preprocessing notebook should exist"
+
+        vector_search_notebook_path = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "data_preparation"
+            / "vector_search"
+            / "notebooks"
+            / "VectorSearch.py"
+        )
+        assert os.path.isfile(
+            vector_search_notebook_path
+        ), "Vector search notebook should exist"
+
+
+@parametrize_by_project_generation_agentops_params
+def test_generate_project_check_mlops_files_not_generated(
+    tmpdir,
+    databricks_cli,
+    project_type,
+    cloud,
+    cicd_platform,
+    setup_cicd_and_project,
+    include_feature_store,
+    include_mlflow_recipes,
+    include_models_in_unity_catalog,
+):
+    """
+    Asserts that MLOps-related artifacts are not generated when generating AgentOps Stacks.
+    """
+    context = prepareContext(
+        project_type,
+        cloud,
+        cicd_platform,
+        setup_cicd_and_project,
+    )
+    generate(tmpdir, databricks_cli, context=context)
+
+    if setup_cicd_and_project != "CICD_Only":
+        training_dir = tmpdir / TEST_PROJECT_NAME / TEST_PROJECT_DIRECTORY / "training"
+        assert not os.path.exists(
+            training_dir
+        ), "Training directory should not exist for agentops"
+
+        feature_engineering_dir = (
+            tmpdir / TEST_PROJECT_NAME / TEST_PROJECT_DIRECTORY / "feature_engineering"
+        )
+        assert not os.path.exists(
+            feature_engineering_dir
+        ), "Feature engineering directory should not exist for agentops"
+
+        batch_inference_dir = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "deployment"
+            / "batch_inference"
+        )
+        assert not os.path.exists(
+            batch_inference_dir
+        ), "Batch inference directory should not exist for agentops"
+
+        model_deployment_dir = (
+            tmpdir
+            / TEST_PROJECT_NAME
+            / TEST_PROJECT_DIRECTORY
+            / "deployment"
+            / "model_deployment"
+        )
+        assert not os.path.exists(
+            model_deployment_dir
+        ), "Model deployment directory should not exist for agentops"
+
+        monitoring_dir = (
+            tmpdir / TEST_PROJECT_NAME / TEST_PROJECT_DIRECTORY / "monitoring"
+        )
+        assert not os.path.exists(
+            monitoring_dir
+        ), "Monitoring directory should not exist for agentops"
+
+        validation_dir = (
+            tmpdir / TEST_PROJECT_NAME / TEST_PROJECT_DIRECTORY / "validation"
+        )
+        assert not os.path.exists(
+            validation_dir
+        ), "Validation directory should not exist for agentops"
+
+
+@pytest.mark.parametrize("cloud", ["aws", "azure", "gcp"])
+def test_agentops_no_template_strings(tmpdir, databricks_cli, cloud):
+    context = {
+        "input_project_type": "agentops",
+        "input_project_name": TEST_PROJECT_NAME,
+        "input_root_dir": TEST_PROJECT_DIRECTORY,
+        "input_cloud": cloud,
+    }
+    generate(tmpdir, databricks_cli, context=context)
+
+    generated_dir = tmpdir / TEST_PROJECT_DIRECTORY
+    assert_no_disallowed_strings_in_files(
+        file_paths=[os.path.join(generated_dir, path) for path in paths(generated_dir)],
+        disallowed_strings=["{{", "{%", "%}"],
+        exclude_path_matches=[".github", ".yml", ".yaml"],
+    )

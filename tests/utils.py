@@ -51,7 +51,8 @@ def parametrize_by_cloud(fn):
     return wrapper
 
 
-def parametrize_by_project_generation_params(fn):
+def parametrize_by_project_generation_mlops_params(fn):
+    @pytest.mark.parametrize("project_type", ["mlops"])
     @pytest.mark.parametrize("cloud", ["aws", "azure", "gcp"])
     @pytest.mark.parametrize(
         "cicd_platform",
@@ -84,10 +85,82 @@ def parametrize_by_project_generation_params(fn):
     return wrapper
 
 
+def parametrize_by_project_generation_agentops_params(fn):
+    @pytest.mark.parametrize("project_type", ["agentops"])
+    @pytest.mark.parametrize("cloud", ["aws", "azure", "gcp"])
+    @pytest.mark.parametrize(
+        "cicd_platform",
+        [
+            "github_actions",
+            "github_actions_for_github_enterprise_servers",
+            "azure_devops",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "setup_cicd_and_project",
+        [
+            "CICD_and_Project",
+            "Project_Only",
+            "CICD_Only",
+        ],
+    )
+    @pytest.mark.parametrize("include_feature_store", [""])
+    @pytest.mark.parametrize("include_mlflow_recipes", [""])
+    @pytest.mark.parametrize("include_models_in_unity_catalog", [""])
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def parameterize_by_cicd_params(cicd_platforms):
+    """
+    Parametrize for CI/CD tests for both MLOps and AgentOps.
+    """
+    def decorator(fn):
+        @pytest.mark.parametrize("project_type", ["mlops", "agentops"])
+        @pytest.mark.parametrize("cicd_platform", cicd_platforms)
+        @pytest.mark.parametrize(
+            "setup_cicd_and_project,include_feature_store,include_mlflow_recipes,include_models_in_unity_catalog",
+            [
+                # MLOps combinations
+                ("CICD_and_Project", "no", "no", "no"),
+                ("CICD_and_Project", "no", "no", "yes"),
+                ("CICD_and_Project", "no", "yes", "no"),
+                ("CICD_and_Project", "yes", "no", "no"),
+                ("CICD_and_Project", "yes", "no", "yes"),
+                ("CICD_Only", "no", "no", "no"),
+                # AgentOps combinations (one per setup_cicd_and_project)
+                ("CICD_and_Project", "", "", ""),
+                ("CICD_Only", "", "", ""),
+            ],
+        )
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            # Skip invalid combinations
+            project_type = kwargs.get("project_type")
+            include_feature_store = kwargs.get("include_feature_store")
+            
+            # Skip MLOps tests with empty params
+            if project_type == "mlops" and include_feature_store == "":
+                pytest.skip("MLOps requires explicit parameter configuration")
+            
+            # Skip AgentOps tests with non-empty mlops params
+            if project_type == "agentops" and include_feature_store != "":
+                pytest.skip("AgentOps doesn't use MLOps-specific parameters")
+            
+            return fn(*args, **kwargs)
+
+        return wrapper
+    return decorator
+
+
 @pytest.fixture
 def generated_project_dir(
     tmpdir,
     databricks_cli,
+    project_type,
     cloud,
     cicd_platform,
     setup_cicd_and_project,
@@ -96,9 +169,10 @@ def generated_project_dir(
     include_models_in_unity_catalog,
 ):
     params = {
-        "input_project_type": "mlops",
+        "input_project_type": project_type,
         "input_setup_cicd_and_project": setup_cicd_and_project,
-        "input_root_dir": "my-mlops-project",
+        "input_root_dir": f"my-{project_type}-project",
+        "input_project_name": f"my-{project_type}-project",
         "input_cloud": cloud,
     }
     if setup_cicd_and_project != "Project_Only":
@@ -112,29 +186,34 @@ def generated_project_dir(
             }
         )
     if setup_cicd_and_project != "CICD_Only":
-        params.update(
-            {
-                "input_project_name": "my-mlops-project",
-                "input_include_feature_store": include_feature_store,
-                "input_include_mlflow_recipes": include_mlflow_recipes,
-                "input_read_user_group": "users",
-                "input_include_models_in_unity_catalog": include_models_in_unity_catalog,
-                "input_schema_name": "schema_name",
-                "input_unity_catalog_read_user_group": "account users",
-                "input_inference_table_name": "dummy.schema.table",
-            }
-        )
+        project_params = {
+            "input_read_user_group": "users",
+            "input_schema_name": "schema_name",
+            "input_unity_catalog_read_user_group": "account users",
+            "input_inference_table_name": "dummy.schema.table",
+        }
+        # Only add mlops-specific parameters if they have values (not empty strings)
+        # For agentops, these will be empty strings meaning "not applicable"
+        if include_feature_store != "":
+            project_params["input_include_feature_store"] = include_feature_store
+        if include_mlflow_recipes != "":
+            project_params["input_include_mlflow_recipes"] = include_mlflow_recipes
+        if include_models_in_unity_catalog != "":
+            project_params["input_include_models_in_unity_catalog"] = (
+                include_models_in_unity_catalog
+            )
+        params.update(project_params)
     generate(tmpdir, databricks_cli, params)
     return tmpdir
 
 
-def read_workflow(tmpdir):
-    return (tmpdir / "my-mlops-project" / ".github/workflows/run-tests.yml").read_text(
-        "utf-8"
-    )
+def read_workflow(tmpdir, project_type="mlops"):
+    return (
+        tmpdir / f"my-{project_type}-project" / ".github/workflows/run-tests.yml"
+    ).read_text("utf-8")
 
 
-def markdown_checker_configs(tmpdir):
+def markdown_checker_configs(tmpdir, project_type="mlops"):
     markdown_checker_config_dict = {
         "ignorePatterns": [
             {"pattern": "http://127.0.0.1:5000"},
@@ -151,7 +230,7 @@ def markdown_checker_configs(tmpdir):
 
     file_name = "checker-config.json"
 
-    with open(tmpdir / "my-mlops-project" / file_name, "w") as outfile:
+    with open(tmpdir / f"my-{project_type}-project" / file_name, "w") as outfile:
         json.dump(markdown_checker_config_dict, outfile)
 
 

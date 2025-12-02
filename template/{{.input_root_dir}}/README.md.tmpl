@@ -146,11 +146,13 @@ contained in the following files:
 │
 ├── cicd.tar.gz                 <- Contains CI/CD bundle that should be deployed by deploy-cicd.yml to set up CI/CD for projects.
 ```
+{{ end }}
 
 ## Using this repo
 
 The table below links to detailed docs explaining how to use this repo for different use cases.
 
+{{ if (eq .input_project_type `mlops`) }}
 {{ if (eq .input_setup_cicd_and_project `CICD_and_Project`)}}
 This project comes with example ML code to train, validate and deploy a regression model to predict NYC taxi fares.
 If you're a data scientist just getting started with this repo for a brand new ML project, we recommend 
@@ -195,9 +197,10 @@ run the above mentioned workflow, specifying the `project_name` as a parameter. 
 {{ if (eq .input_setup_cicd_and_project `CICD_and_Project`)}}
 NOTE: This project has already been initialized with an instantiation of the above workflow, so there's no
 need to run it again for project `{{.input_project_name}}`.
-{{ end -}}
+{{ end }}
+{{ else if (eq .input_project_type `agentops`) }}
 
-{{ else if (eq .input_project_type `agentops`) }}This directory contains an Agent project defining a production-grade Agent pipeline for automated data preparation, agent development, and deployment. 
+This directory contains an Agent project defining a production-grade Agent pipeline for automated data preparation, agent development, and deployment. 
 
 ## Code structure
 This project contains the following components:
@@ -212,9 +215,9 @@ This project contains the following components:
 contained in the following files:
 
 ```
-my_agent_project        <- Root directory. Both monorepo and polyrepo are supported.
+{{template `project_name_alphanumeric_underscore` .}}        <- Root directory. Both monorepo and polyrepo are supported.
 │
-├── my_agent_project            <- Contains python code, notebooks and resources related to one project. 
+├── {{template `project_name_alphanumeric_underscore` .}}            <- Contains python code, notebooks and resources related to one project. 
 │   │
 │   ├── databricks.yml          <- root bundle file for the project that can be loaded by databricks CLI bundles. It defines the bundle name, workspace URL and resource config component to be included.
 │   │
@@ -261,19 +264,22 @@ my_agent_project        <- Root directory. Both monorepo and polyrepo are suppor
 
 ## Using this repo
 
-
-If you're a data scientist just getting started with this repo for a brand new Agent, we recommend adapting the provided example code to your Agent. Then making and testing the agent workflow code changes on Databricks or your local machine. Follow the instructions from the [project README](./my_agent_project/README.md). 
+{{ if (eq .input_setup_cicd_and_project `CICD_and_Project`) }}
+If you're a data scientist just getting started with this repo for a brand new Agent, we recommend adapting the provided example code to your Agent. Then making and testing the agent workflow code changes on Databricks or your local machine. Follow the instructions from the [project README](./{{template `project_name_alphanumeric_underscore` .}}/README.md). 
 
 When you're ready to deploy production training/inference
-pipelines, ask your ops team to follow the [setup guide](docs/agentops-setup.md) to configure CI/CD and deploy production pipelines.
+pipelines, ask your ops team to follow the [setup guide](docs/mlops-setup.md) to configure CI/CD and deploy production pipelines.
 
-After that, follow the [pull request guide](docs/pull-request.md)
- and [agent resource config guide](my_agent_project/resources/README.md) to propose, test, and deploy changes to production code (e.g. updating a prompt) or pipeline resources (e.g. using a different size for Model Serving) via pull request.
+After that, follow the [pull request guide](docs/ml-pull-request.md)
+ and [agent resource config guide]({{template `project_name_alphanumeric_underscore` .}}/resources/README.md) to propose, test, and deploy changes to production code (e.g. updating a prompt) or pipeline resources (e.g. using a different size for Model Serving) via pull request.
+{{ else }}
+If you're setting up CI/CD for your Agent projects, follow the [setup guide](docs/mlops-setup.md) to configure CI/CD and deploy production pipelines.
+{{ end }}
 
 | Role                          | Goal                                                                         | Docs                                                                                                                                                                |
 |-------------------------------|------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Data Scientist                | Get started writing Agent code for a brand new project                          | [project README](./my_agent_project/README.md) |
-| Ops                | Set up CI/CD for the current Agent   | [AgentOps setup guide](docs/agentops-setup.md)                                                                                                                            |
-| Data Scientist                | Update production Agent for an existing project | [pull request guide](docs/pull-request.md)                                                                                                                    |
-| Data Scientist/MLE                | Modify production Agent resources, e.g. data preparation or agent development jobs  | [Agent resource config guide](my_agent_project/resources/README.md)  | 
+{{ if (eq .input_setup_cicd_and_project `CICD_and_Project`) }}| Data Scientist                | Get started writing Agent code for a brand new project                          | [project README](./{{template `project_name_alphanumeric_underscore` .}}/README.md) |{{ end }}
+| Ops                | Set up CI/CD for the current Agent   | [AgentOps setup guide](docs/mlops-setup.md)                                                                                                                            |
+{{ if (eq .input_setup_cicd_and_project `CICD_and_Project`) }}| Data Scientist                | Update production Agent for an existing project | [pull request guide](docs/ml-pull-request.md)                                                                                                                    |
+| Data Scientist/MLE                | Modify production Agent resources, e.g. data preparation or agent development jobs  | [Agent resource config guide]({{template `project_name_alphanumeric_underscore` .}}/resources/README.md)  |{{ end }} 
 {{ end }}

@@ -1,7 +1,7 @@
 from utils import (
     databricks_cli,
     generated_project_dir,
-    parametrize_by_project_generation_params,
+    parametrize_by_project_generation_mlops_params,
 )
 import pytest
 import os
@@ -18,7 +18,7 @@ from mlflow.recipes import Recipe
         "local",
     ],
 )
-@parametrize_by_project_generation_params
+@parametrize_by_project_generation_mlops_params
 def test_mlp_yaml_valid(generated_project_dir, profile, include_mlflow_recipes):
     # There's no MLP YAML configs generated so skip test in that case.
     if include_mlflow_recipes == "no":
