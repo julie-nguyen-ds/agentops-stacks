@@ -1,6 +1,6 @@
 {
   "welcome_message":"Welcome to MLOps Stacks. For detailed information on project generation, see the README at https://github.com/databricks/mlops-stacks/blob/main/README.md.",
-  "min_databricks_cli_version": "v0.266.0", 
+  "min_databricks_cli_version": "v0.278.0", 
   "properties": {
     "input_project_type": {
       "order": 1,
