@@ -46,6 +46,7 @@
 # DBTITLE 1,Install Prerequisites
 # Install prerequisite packages
 %pip install -r ../../agent_requirements.txt
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -268,8 +269,8 @@ client_mlflow = MlflowClient()
 
 registered_model_name = f"{uc_catalog}.{schema}.{registered_model}"
 uc_registered_model_info = mlflow.register_model(model_info.model_uri,
-                                                 name=registered_model_name,
-                                                 env_pack="databricks_model_serving") # Optimized deployment: only for Serverless Env 3
+                                                 name=registered_model_name)
+                                                 # env_pack="databricks_model_serving") # Optimized deployment: only for Serverless Env 3
 
 # Set an alias for new version of the registered model to retrieve it for model serving
 client_mlflow.set_registered_model_alias(f"{uc_catalog}.{schema}.{registered_model}", model_alias, uc_registered_model_info.version)

@@ -150,7 +150,7 @@ for idx, row in ref_docs_df.head(100).iterrows():
         "inputs": {
             "question": row.get('request', '')
         },
-        "expected": {
+        "expectations": {
             "expected_response": row.get('expected_response', '')
         }
     }
@@ -267,75 +267,31 @@ print("="*80)
 # COMMAND ----------
 
 # DBTITLE 1,Define Evaluation Scorers
-import mlflow
+from mlflow.genai.scorers import (
+    RelevanceToQuery,
+    Safety,
+    RetrievalGroundedness,
+    Correctness
+)
+from mlflow.genai.scorers import Guidelines
 
-# For MLflow 3.5.1, scorers are typically defined using mlflow.metrics or custom functions
-# We'll use built-in metrics and custom judges
+# For MLflow 3.8.1, scorers are typically defined using pre-defined scorers in mlflow.genai.scorers, guidelines or custom judges.
+# We'll use built-in metrics and guidelines
 
-def get_scorers():
-    """
-    Define evaluation scorers for agent evaluation.
-    In MLflow 3.5.1, we use make_genai_metric for custom LLM-as-judge metrics.
-    """
-    scorers = []
+eval_model = "databricks:/databricks-gpt-5-mini"
+professional_tone_scorer = Guidelines(
+    name="professional_tone",
+    guidelines="""
+    The response must use professional, courteous language appropriate for developers.
+    Requirements:
+    - Use polite and respectful language
+    - Avoid casual expressions or slang
+    - Maintain a helpful and solution-oriented tone
+    """,
+    model=eval_model,
+)
 
-    try:
-        # Try importing the genai scorers (may vary by MLflow version)
-        from mlflow.metrics.genai import answer_relevance, faithfulness, answer_correctness
-
-        scorers.extend([
-            answer_relevance,  # Checks if response addresses the user's query
-            faithfulness,  # Checks if response is grounded in retrieved context
-            answer_correctness,  # Compares response against expected answer
-        ])
-    except ImportError:
-        print("Note: Some genai metrics may not be available in this MLflow version")
-        print("Evaluation will proceed with available metrics")
-
-    # Add any custom metrics if needed
-    try:
-        from mlflow.metrics.genai import make_genai_metric, EvaluationExample
-
-        response_quality = make_genai_metric(
-            name="response_quality",
-            definition="""
-            Evaluate if the response is clear, professional, and actionable.
-            The response should not mention internal tools or show intermediate reasoning.
-            """,
-            grading_prompt="""
-            Score the response on the following criteria:
-            - Clarity and professionalism (1-5)
-            - Avoids mentioning internal tools or functions (Yes/No)
-            - Provides direct, actionable answers (1-5)
-
-            Provide a score from 1-5 where:
-            1 = Poor quality, unprofessional, or mentions internal details
-            5 = Excellent quality, professional, clear and actionable
-            """,
-            examples=[
-                EvaluationExample(
-                    input="How do I create a table?",
-                    output="To create a table, use the CREATE TABLE SQL command with your desired columns and data types.",
-                    score=5,
-                    justification="Clear, professional, and actionable without internal details"
-                ),
-                EvaluationExample(
-                    input="How do I create a table?",
-                    output="I used the get_table_info() function and then processed the schema...",
-                    score=2,
-                    justification="Mentions internal functions instead of providing direct answer"
-                )
-            ],
-            version="v1",
-            greater_is_better=True
-        )
-        scorers.append(response_quality)
-    except Exception as e:
-        print(f"Could not create custom response_quality metric: {e}")
-
-    return scorers
-
-scorers = get_scorers()
+scorers = [RelevanceToQuery(), Safety(), RetrievalGroundedness(), Correctness(), professional_tone_scorer]
 print(f"Loaded {len(scorers)} evaluation scorers")
 
 # COMMAND ----------
@@ -360,30 +316,17 @@ with mlflow.start_run(run_name="agent_evaluation") as run:
     print(f"\nMLflow Run ID: {run.info.run_id}")
 
     try:
-        # In MLflow 3.5.1, mlflow.evaluate is the standard API
+        # In MLflow 3.8.1, mlflow.genai.evaluate is the standard API
         # If using genai-specific features, use mlflow.genai.evaluate
 
         # Prepare evaluation data - convert dataset to pandas DataFrame
         eval_df = eval_dataset.to_df().toPandas() if hasattr(eval_dataset.to_df(), 'toPandas') else eval_dataset.to_df()
 
-        # Create a wrapper function that works with the evaluate API
-        def model_predict(inputs):
-            """Wrapper that accepts inputs dict/series and returns predictions"""
-            if isinstance(inputs, dict):
-                question = inputs.get('question', '')
-            else:
-                # Handle pandas Series
-                question = inputs['question'] if 'question' in inputs else str(inputs)
-            return predict_wrapper(question)
-
         print("\nRunning evaluation...")
-        results = mlflow.evaluate(
+        results = mlflow.genai.evaluate(
             data=eval_df,
-            model_type="question-answering",
-            predictions="output",  # Column name for predictions
-            targets="expected_response",  # Column name for ground truth (if available)
-            extra_metrics=scorers if scorers else None,
-            evaluators="default" if not scorers else None,
+            predict_fn=predict_wrapper,
+            scorers=scorers
         )
 
         print("\nEvaluation complete!")
